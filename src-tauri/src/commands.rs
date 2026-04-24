@@ -5,7 +5,8 @@ use tauri::{AppHandle, State};
 
 use crate::events::spawn_forwarder;
 use crate::iroh::space::{
-    self, Category, Channel, Member, Message, Reaction, Space, SpaceInfo, Thread,
+    self, Category, Channel, FileMeta, Member, Message, Page, PageWithBody, Reaction, Space,
+    SpaceInfo, Thread,
 };
 use crate::state::AppState;
 
@@ -300,4 +301,119 @@ pub async fn member_list(
 ) -> CmdResult<Vec<Member>> {
     let space = ensure_space(&app, &state, &space_id).await?;
     space.list_members().await.map_err(err)
+}
+
+// --- Pages ---
+
+#[tauri::command]
+pub async fn page_list(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    space_id: String,
+) -> CmdResult<Vec<Page>> {
+    let space = ensure_space(&app, &state, &space_id).await?;
+    space.list_pages().await.map_err(err)
+}
+
+#[tauri::command]
+pub async fn page_create(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    space_id: String,
+    title: String,
+    parent_id: Option<String>,
+) -> CmdResult<Page> {
+    let space = ensure_space(&app, &state, &space_id).await?;
+    space.create_page(title, parent_id).await.map_err(err)
+}
+
+#[tauri::command]
+pub async fn page_get(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    space_id: String,
+    id: String,
+) -> CmdResult<Option<PageWithBody>> {
+    let space = ensure_space(&app, &state, &space_id).await?;
+    space.get_page(&id).await.map_err(err)
+}
+
+#[tauri::command]
+pub async fn page_update(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    space_id: String,
+    id: String,
+    title: Option<String>,
+    body: Option<String>,
+) -> CmdResult<Page> {
+    let space = ensure_space(&app, &state, &space_id).await?;
+    space.update_page(&id, title, body).await.map_err(err)
+}
+
+#[tauri::command]
+pub async fn page_delete(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    space_id: String,
+    id: String,
+) -> CmdResult<()> {
+    let space = ensure_space(&app, &state, &space_id).await?;
+    space.delete_page(&id).await.map_err(err)
+}
+
+// --- Files ---
+
+#[tauri::command]
+pub async fn file_list(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    space_id: String,
+) -> CmdResult<Vec<FileMeta>> {
+    let space = ensure_space(&app, &state, &space_id).await?;
+    space.list_files().await.map_err(err)
+}
+
+#[tauri::command]
+pub async fn file_upload(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    space_id: String,
+    source_path: String,
+) -> CmdResult<FileMeta> {
+    let space = ensure_space(&app, &state, &space_id).await?;
+    space
+        .upload_file(std::path::PathBuf::from(source_path))
+        .await
+        .map_err(err)
+}
+
+#[tauri::command]
+pub async fn file_export(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    space_id: String,
+    id: String,
+    target_path: String,
+) -> CmdResult<FileMeta> {
+    let space = ensure_space(&app, &state, &space_id).await?;
+    space
+        .export_file(&id, std::path::PathBuf::from(target_path))
+        .await
+        .map_err(err)
+}
+
+#[tauri::command]
+pub async fn file_default_download_path(
+    app: AppHandle,
+    name: String,
+) -> CmdResult<String> {
+    use tauri::Manager;
+    let dir = app
+        .path()
+        .download_dir()
+        .or_else(|_| app.path().app_data_dir())
+        .map_err(err)?;
+    let path = dir.join("duochat").join(name);
+    Ok(path.to_string_lossy().to_string())
 }

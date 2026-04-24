@@ -75,6 +75,15 @@ pub fn run() {
             reaction_list,
             member_upsert,
             member_list,
+            page_list,
+            page_create,
+            page_get,
+            page_update,
+            page_delete,
+            file_list,
+            file_upload,
+            file_export,
+            file_default_download_path,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

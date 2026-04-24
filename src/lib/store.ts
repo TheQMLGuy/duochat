@@ -2,14 +2,22 @@ import { create } from "zustand";
 import type {
   Category,
   Channel,
+  FileMeta,
   Identity,
   Member,
   Message,
+  Page,
   Reaction,
   SpaceInfo,
   Thread,
 } from "./types";
 import { cmd } from "./tauri";
+
+export type SidePanel =
+  | { kind: "none" }
+  | { kind: "page"; id: string }
+  | { kind: "file"; id: string }
+  | { kind: "threads" };
 
 interface DuochatState {
   ready: boolean;
@@ -22,6 +30,8 @@ interface DuochatState {
   channels: Channel[];
   threads: Thread[];
   members: Member[];
+  pages: Page[];
+  files: FileMeta[];
 
   currentChannelId: string | null;
   currentThreadId: string | null;
@@ -30,6 +40,10 @@ interface DuochatState {
   reactions: Reaction[];
 
   pendingOnlinePeers: Set<string>;
+  sidePanel: SidePanel;
+  setSidePanel: (p: SidePanel) => void;
+  sidebarTab: "chat" | "pages" | "files";
+  setSidebarTab: (t: "chat" | "pages" | "files") => void;
 
   loadIdentity: () => Promise<void>;
   refreshSpaces: () => Promise<void>;
@@ -52,6 +66,10 @@ interface DuochatState {
 
   applyInsertedKey: (key: string) => Promise<void>;
 
+  refreshPages: () => Promise<void>;
+  refreshFiles: () => Promise<void>;
+  createPage: (title: string, parentId?: string | null) => Promise<Page>;
+
   markNeighbor: (id: string, online: boolean) => void;
 }
 
@@ -68,11 +86,17 @@ export const useDuochat = create<DuochatState>((set, get) => ({
   channels: [],
   threads: [],
   members: [],
+  pages: [],
+  files: [],
   currentChannelId: null,
   currentThreadId: null,
   messagesByScope: {},
   reactions: [],
   pendingOnlinePeers: new Set(),
+  sidePanel: { kind: "threads" },
+  setSidePanel: (p) => set({ sidePanel: p }),
+  sidebarTab: "chat",
+  setSidebarTab: (t) => set({ sidebarTab: t }),
 
   async loadIdentity() {
     const identity = await cmd.identityGet();
@@ -105,9 +129,13 @@ export const useDuochat = create<DuochatState>((set, get) => ({
       currentChannelId: null,
       currentThreadId: null,
       messagesByScope: {},
+      pages: [],
+      files: [],
     });
     await get().refreshMeta();
     await get().refreshReactions();
+    await get().refreshPages();
+    await get().refreshFiles();
   },
 
   async getShareTicket(spaceId) {
@@ -198,7 +226,39 @@ export const useDuochat = create<DuochatState>((set, get) => ({
     set({ reactions });
   },
 
+  async refreshPages() {
+    const id = get().currentSpaceId;
+    if (!id) return;
+    const pages = await cmd.pageList(id);
+    pages.sort((a, b) => a.title.localeCompare(b.title));
+    set({ pages });
+  },
+
+  async refreshFiles() {
+    const id = get().currentSpaceId;
+    if (!id) return;
+    const files = await cmd.fileList(id);
+    files.sort((a, b) => b.uploaded_at - a.uploaded_at);
+    set({ files });
+  },
+
+  async createPage(title, parentId = null) {
+    const id = get().currentSpaceId;
+    if (!id) throw new Error("no space open");
+    const p = await cmd.pageCreate(id, title, parentId);
+    await get().refreshPages();
+    return p;
+  },
+
   async applyInsertedKey(key) {
+    if (key.startsWith("meta/page/") || key.startsWith("page_body/")) {
+      await get().refreshPages();
+      return;
+    }
+    if (key.startsWith("meta/file/") || key.startsWith("blob/")) {
+      await get().refreshFiles();
+      return;
+    }
     if (key.startsWith("meta/")) {
       await get().refreshMeta();
       return;

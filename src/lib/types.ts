@@ -58,6 +58,30 @@ export interface Member {
   updated_at: number;
 }
 
+export interface Page {
+  id: string;
+  title: string;
+  parent_id: string | null;
+  created_by: string;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface PageWithBody {
+  page: Page;
+  body: string;
+}
+
+export interface FileMeta {
+  id: string;
+  name: string;
+  mime: string;
+  size: number;
+  hash: string;
+  uploaded_by: string;
+  uploaded_at: number;
+}
+
 export type SpaceEvent =
   | { kind: "insert_local"; space_id: string; key: string }
   | { kind: "insert_remote"; space_id: string; key: string; from: string }

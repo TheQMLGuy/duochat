@@ -26,6 +26,9 @@ const P_CATEGORY: &str = "meta/category/";
 const P_CHANNEL: &str = "meta/channel/";
 const P_THREAD: &str = "meta/thread/";
 const P_MEMBER: &str = "meta/member/";
+const P_PAGE: &str = "meta/page/";
+const P_FILE: &str = "meta/file/";
+const P_PAGE_BODY: &str = "page_body/";
 const P_MSG: &str = "msg/"; // msg/{channel_or_thread_id}/{ts_zpad}/{author_short}/{nonce}
 const P_REACTION: &str = "reaction/"; // reaction/{message_id}/{author}/{emoji}
 
@@ -43,6 +46,34 @@ fn now_ms() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
+}
+
+fn mime_for(name: &str) -> String {
+    let ext = name
+        .rsplit('.')
+        .next()
+        .map(|s| s.to_ascii_lowercase())
+        .unwrap_or_default();
+    match ext.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "svg" => "image/svg+xml",
+        "pdf" => "application/pdf",
+        "md" => "text/markdown",
+        "txt" | "log" => "text/plain",
+        "json" => "application/json",
+        "html" | "htm" => "text/html",
+        "csv" => "text/csv",
+        "mp4" => "video/mp4",
+        "webm" => "video/webm",
+        "mp3" => "audio/mpeg",
+        "wav" => "audio/wav",
+        "zip" => "application/zip",
+        _ => "application/octet-stream",
+    }
+    .to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -95,6 +126,33 @@ pub struct Reaction {
     pub message_id: String,
     pub author: String,
     pub emoji: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Page {
+    pub id: String,
+    pub title: String,
+    pub parent_id: Option<String>,
+    pub created_by: String,
+    pub created_at: u64,
+    pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PageWithBody {
+    pub page: Page,
+    pub body: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileMeta {
+    pub id: String,
+    pub name: String,
+    pub mime: String,
+    pub size: u64,
+    pub hash: String,
+    pub uploaded_by: String,
+    pub uploaded_at: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -356,6 +414,161 @@ impl Space {
     pub async fn list_members(&self) -> Result<Vec<Member>> {
         let query = Query::key_prefix(P_MEMBER).build();
         self.collect_json::<Member>(query).await
+    }
+
+    // --- Pages (Notion-style markdown notes) ---
+
+    pub async fn create_page(
+        &self,
+        title: String,
+        parent_id: Option<String>,
+    ) -> Result<Page> {
+        let now = now_ms();
+        let page = Page {
+            id: nanoid!(12),
+            title,
+            parent_id,
+            created_by: self.author.to_string(),
+            created_at: now,
+            updated_at: now,
+        };
+        let key = format!("{}{}", P_PAGE, page.id);
+        self.set_json(key, &page).await?;
+        // Create empty body
+        let body_key = format!("{}{}", P_PAGE_BODY, page.id);
+        self.doc
+            .set_bytes(self.author, body_key, Vec::<u8>::new())
+            .await?;
+        Ok(page)
+    }
+
+    pub async fn list_pages(&self) -> Result<Vec<Page>> {
+        let query = Query::key_prefix(P_PAGE).build();
+        self.collect_json::<Page>(query).await
+    }
+
+    pub async fn get_page(&self, id: &str) -> Result<Option<PageWithBody>> {
+        let meta_key = format!("{}{}", P_PAGE, id);
+        let Some(meta_entry) = self.doc.get_exact(self.author, meta_key.as_bytes(), false).await? else {
+            return Ok(None);
+        };
+        let Some(page) = self.get_json::<Page>(&meta_entry).await? else {
+            return Ok(None);
+        };
+        let body_key = format!("{}{}", P_PAGE_BODY, id);
+        let body = if let Some(body_entry) = self.doc.get_one(Query::key_exact(body_key.as_bytes()).build()).await? {
+            let bytes = self.read_entry(&body_entry).await?;
+            String::from_utf8(bytes).unwrap_or_default()
+        } else {
+            String::new()
+        };
+        Ok(Some(PageWithBody { page, body }))
+    }
+
+    pub async fn update_page(
+        &self,
+        id: &str,
+        title: Option<String>,
+        body: Option<String>,
+    ) -> Result<Page> {
+        let meta_key = format!("{}{}", P_PAGE, id);
+        let Some(entry) = self.doc.get_exact(self.author, meta_key.as_bytes(), false).await? else {
+            return Err(anyhow!("page not found"));
+        };
+        let Some(mut page) = self.get_json::<Page>(&entry).await? else {
+            return Err(anyhow!("page payload missing"));
+        };
+        if let Some(t) = title {
+            page.title = t;
+        }
+        page.updated_at = now_ms();
+        self.set_json(meta_key, &page).await?;
+        if let Some(b) = body {
+            let body_key = format!("{}{}", P_PAGE_BODY, id);
+            self.doc
+                .set_bytes(self.author, body_key, b.into_bytes())
+                .await?;
+        }
+        Ok(page)
+    }
+
+    pub async fn delete_page(&self, id: &str) -> Result<()> {
+        let meta_key = format!("{}{}", P_PAGE, id);
+        let body_key = format!("{}{}", P_PAGE_BODY, id);
+        self.doc.del(self.author, meta_key).await?;
+        self.doc.del(self.author, body_key).await?;
+        Ok(())
+    }
+
+    // --- Files (iroh-blobs backed) ---
+
+    pub async fn upload_file(&self, source_path: std::path::PathBuf) -> Result<FileMeta> {
+        let metadata = tokio::fs::metadata(&source_path)
+            .await
+            .with_context(|| format!("read metadata for {}", source_path.display()))?;
+        let size = metadata.len();
+        let name = source_path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "untitled".to_string());
+        let mime = mime_for(&name);
+
+        let tag = self
+            .blobs
+            .blobs()
+            .add_path(&source_path)
+            .await
+            .map_err(|e| anyhow!("add file to blobs: {e}"))?;
+        let hash = tag.hash;
+
+        // Reference the blob from a doc entry so it syncs to the peer.
+        let blob_key = format!("blob/{}", hash);
+        self.doc
+            .set_hash(self.author, blob_key.as_bytes().to_vec(), hash, size)
+            .await?;
+
+        let meta = FileMeta {
+            id: nanoid!(12),
+            name,
+            mime,
+            size,
+            hash: hash.to_string(),
+            uploaded_by: self.author.to_string(),
+            uploaded_at: now_ms(),
+        };
+        let key = format!("{}{}", P_FILE, meta.id);
+        self.set_json(key, &meta).await?;
+        Ok(meta)
+    }
+
+    pub async fn list_files(&self) -> Result<Vec<FileMeta>> {
+        let query = Query::key_prefix(P_FILE).build();
+        self.collect_json::<FileMeta>(query).await
+    }
+
+    pub async fn get_file(&self, id: &str) -> Result<Option<FileMeta>> {
+        let key = format!("{}{}", P_FILE, id);
+        let Some(entry) = self.doc.get_exact(self.author, key.as_bytes(), false).await? else {
+            return Ok(None);
+        };
+        self.get_json::<FileMeta>(&entry).await
+    }
+
+    pub async fn export_file(&self, id: &str, target: std::path::PathBuf) -> Result<FileMeta> {
+        let Some(meta) = self.get_file(id).await? else {
+            return Err(anyhow!("file not found"));
+        };
+        let hash = iroh_blobs::Hash::from_str(&meta.hash)
+            .map_err(|e| anyhow!("parse hash: {e}"))?;
+        if let Some(parent) = target.parent() {
+            tokio::fs::create_dir_all(parent).await.ok();
+        }
+        self.blobs
+            .blobs()
+            .export(hash, &target)
+            .await
+            .map_err(|e| anyhow!("export blob: {e}"))?;
+        Ok(meta)
     }
 
     // --- Helpers ---

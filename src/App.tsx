@@ -6,10 +6,18 @@ import { Pairing } from "./features/pairing/Pairing";
 import { Sidebar } from "./features/sidebar/Sidebar";
 import { Chat } from "./features/chat/Chat";
 import { ThreadsPanel } from "./features/threads/ThreadsPanel";
+import { PageEditor } from "./features/pages/PageEditor";
+import { FileViewer } from "./features/files/FileViewer";
 
 function App() {
-  const { ready, loadIdentity, refreshSpaces, spaces, currentSpaceId } =
-    useDuochat();
+  const {
+    ready,
+    loadIdentity,
+    refreshSpaces,
+    spaces,
+    currentSpaceId,
+    sidePanel,
+  } = useDuochat();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [booting, setBooting] = useState(true);
 
@@ -19,7 +27,6 @@ function App() {
     (async () => {
       dispose = await installEventListeners();
       setBooting(false);
-      // Poll until node is ready (in case we missed the node:ready event).
       for (let i = 0; i < 60 && !cancelled; i++) {
         try {
           await loadIdentity();
@@ -67,7 +74,21 @@ function App() {
       )}
 
       <Chat onOpenMenu={() => setDrawerOpen(true)} />
-      <ThreadsPanel />
+
+      <aside className="hidden md:flex md:w-80 shrink-0 border-l border-duo-border bg-duo-surface/40">
+        {sidePanel.kind === "page" && <PageEditor pageId={sidePanel.id} />}
+        {sidePanel.kind === "file" && <FileViewer fileId={sidePanel.id} />}
+        {sidePanel.kind === "threads" && <ThreadsPanel />}
+        {sidePanel.kind === "none" && <EmptyPanel />}
+      </aside>
+    </div>
+  );
+}
+
+function EmptyPanel() {
+  return (
+    <div className="h-full w-full flex items-center justify-center text-duo-muted text-xs p-6 text-center">
+      Select a page, file, or thread to see it here.
     </div>
   );
 }

@@ -3,9 +3,12 @@ import type {
   Category,
   Channel,
   CreatedSpace,
+  FileMeta,
   Identity,
   Member,
   Message,
+  Page,
+  PageWithBody,
   Reaction,
   SpaceInfo,
   Thread,
@@ -93,4 +96,26 @@ export const cmd = {
     invoke<Member>("member_upsert", { spaceId, displayName }),
   memberList: (spaceId: string) =>
     invoke<Member[]>("member_list", { spaceId }),
+
+  pageList: (spaceId: string) => invoke<Page[]>("page_list", { spaceId }),
+  pageCreate: (spaceId: string, title: string, parentId: string | null = null) =>
+    invoke<Page>("page_create", { spaceId, title, parentId }),
+  pageGet: (spaceId: string, id: string) =>
+    invoke<PageWithBody | null>("page_get", { spaceId, id }),
+  pageUpdate: (
+    spaceId: string,
+    id: string,
+    title: string | null,
+    body: string | null,
+  ) => invoke<Page>("page_update", { spaceId, id, title, body }),
+  pageDelete: (spaceId: string, id: string) =>
+    invoke<void>("page_delete", { spaceId, id }),
+
+  fileList: (spaceId: string) => invoke<FileMeta[]>("file_list", { spaceId }),
+  fileUpload: (spaceId: string, sourcePath: string) =>
+    invoke<FileMeta>("file_upload", { spaceId, sourcePath }),
+  fileExport: (spaceId: string, id: string, targetPath: string) =>
+    invoke<FileMeta>("file_export", { spaceId, id, targetPath }),
+  fileDefaultDownloadPath: (name: string) =>
+    invoke<string>("file_default_download_path", { name }),
 };

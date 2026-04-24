@@ -13,7 +13,7 @@ export function ThreadsPanel() {
   );
 
   return (
-    <aside className="hidden md:flex w-64 shrink-0 border-l border-duo-border bg-duo-surface/60 flex-col">
+    <div className="flex-1 min-w-0 flex flex-col">
       <div className="px-4 py-3 border-b border-duo-border">
         <div className="text-xs uppercase tracking-wider text-duo-muted">
           Threads
@@ -46,6 +46,6 @@ export function ThreadsPanel() {
           </button>
         ))}
       </div>
-    </aside>
+    </div>
   );
 }

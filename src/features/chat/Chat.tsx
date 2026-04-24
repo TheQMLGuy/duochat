@@ -4,6 +4,8 @@ import { useDuochat } from "../../lib/store";
 import { cmd } from "../../lib/tauri";
 import type { Message, Reaction } from "../../lib/types";
 import { colorFor, formatTime, initialsFor, shortId } from "../../lib/util";
+import { MessageContent } from "./MessageContent";
+import { Composer } from "./Composer";
 
 const QUICK_REACTIONS = ["👍", "❤️", "🎉", "😂", "👀", "🔥"];
 
@@ -19,9 +21,8 @@ export function Chat({ onOpenMenu }: { onOpenMenu?: () => void }) {
     sendMessage,
     toggleReaction,
     selectThread,
+    setSidePanel,
   } = useDuochat();
-
-  const [draft, setDraft] = useState("");
 
   const channel = channels.find((c) => c.id === currentChannelId);
   const thread = threads.find((t) => t.id === currentThreadId);
@@ -57,12 +58,7 @@ export function Chat({ onOpenMenu }: { onOpenMenu?: () => void }) {
     );
   }
 
-  async function onSend(e: React.FormEvent) {
-    e.preventDefault();
-    const content = draft;
-    setDraft("");
-    await sendMessage(content);
-  }
+  const placeholder = `Message #${channel.name}${thread ? ` › ${thread.name}` : ""}`;
 
   return (
     <div className="flex-1 min-w-0 flex flex-col bg-duo-bg">
@@ -90,6 +86,13 @@ export function Chat({ onOpenMenu }: { onOpenMenu?: () => void }) {
             </button>
           </div>
         )}
+        <div className="flex-1" />
+        <button
+          onClick={() => setSidePanel({ kind: "threads" })}
+          className="text-xs text-duo-muted hover:text-duo-text"
+        >
+          Threads
+        </button>
       </header>
 
       <div ref={scrollerRef} className="flex-1 overflow-y-auto px-2 md:px-6">
@@ -103,7 +106,9 @@ export function Chat({ onOpenMenu }: { onOpenMenu?: () => void }) {
               const isMine = identity?.author_id === m.author;
               const prev = messages[i - 1];
               const collapse =
-                prev && prev.author === m.author && m.created_at - prev.created_at < 5 * 60_000;
+                prev &&
+                prev.author === m.author &&
+                m.created_at - prev.created_at < 5 * 60_000;
               return (
                 <MessageRow
                   key={m.id}
@@ -132,30 +137,7 @@ export function Chat({ onOpenMenu }: { onOpenMenu?: () => void }) {
         )}
       </div>
 
-      <form onSubmit={onSend} className="p-3 border-t border-duo-border bg-duo-surface/60">
-        <div className="flex items-end gap-2 bg-duo-bg border border-duo-border rounded-xl px-3 py-2">
-          <textarea
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                void onSend(e as unknown as React.FormEvent);
-              }
-            }}
-            rows={1}
-            placeholder={`Message #${channel.name}${thread ? ` › ${thread.name}` : ""}`}
-            className="flex-1 resize-none bg-transparent text-sm text-duo-text placeholder:text-duo-muted max-h-40"
-          />
-          <button
-            type="submit"
-            disabled={!draft.trim()}
-            className="text-duo-accent disabled:text-duo-muted px-2 py-1 text-sm font-medium"
-          >
-            Send
-          </button>
-        </div>
-      </form>
+      <Composer placeholder={placeholder} onSend={sendMessage} />
     </div>
   );
 }
@@ -221,8 +203,8 @@ function MessageRow({
             </span>
           </div>
         )}
-        <div className="text-sm whitespace-pre-wrap break-words">
-          {message.content}
+        <div className="text-sm">
+          <MessageContent content={message.content} />
         </div>
         {Object.keys(counts).length > 0 && (
           <div className="mt-1 flex flex-wrap gap-1">
