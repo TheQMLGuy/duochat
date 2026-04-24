@@ -17,6 +17,7 @@ function App() {
     spaces,
     currentSpaceId,
     sidePanel,
+    setSidePanel,
   } = useDuochat();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [booting, setBooting] = useState(true);
@@ -55,6 +56,9 @@ function App() {
     return <Pairing />;
   }
 
+  const panelBody = <SidePanelContent />;
+  const panelOpenMobile = sidePanel.kind !== "none";
+
   return (
     <div className="h-full w-full flex">
       <div className="hidden md:flex md:w-72 lg:w-80 shrink-0 border-r border-duo-border">
@@ -76,16 +80,32 @@ function App() {
       <Chat onOpenMenu={() => setDrawerOpen(true)} />
 
       <aside className="hidden md:flex md:w-80 shrink-0 border-l border-duo-border bg-duo-surface/40">
-        {sidePanel.kind === "page" && <PageEditor pageId={sidePanel.id} />}
-        {sidePanel.kind === "file" && <FileViewer fileId={sidePanel.id} />}
-        {sidePanel.kind === "threads" && <ThreadsPanel />}
-        {sidePanel.kind === "none" && <EmptyPanel />}
+        {panelBody}
       </aside>
+
+      {panelOpenMobile && (
+        <div className="md:hidden fixed inset-0 z-40 flex flex-col bg-duo-bg">
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-duo-border bg-duo-surface/60">
+            <button
+              onClick={() => setSidePanel({ kind: "none" })}
+              className="text-sm text-duo-muted hover:text-duo-text px-2 py-1"
+              aria-label="Back to chat"
+            >
+              ← Back
+            </button>
+          </div>
+          <div className="flex-1 min-h-0">{panelBody}</div>
+        </div>
+      )}
     </div>
   );
 }
 
-function EmptyPanel() {
+function SidePanelContent() {
+  const { sidePanel } = useDuochat();
+  if (sidePanel.kind === "page") return <PageEditor pageId={sidePanel.id} />;
+  if (sidePanel.kind === "file") return <FileViewer fileId={sidePanel.id} />;
+  if (sidePanel.kind === "threads") return <ThreadsPanel />;
   return (
     <div className="h-full w-full flex items-center justify-center text-duo-muted text-xs p-6 text-center">
       Select a page, file, or thread to see it here.

@@ -136,6 +136,18 @@ export const useDuochat = create<DuochatState>((set, get) => ({
     await get().refreshReactions();
     await get().refreshPages();
     await get().refreshFiles();
+
+    // Make sure our member profile exists so mentions have a real name.
+    const ident = get().identity;
+    const existing = get().members.find((m) => m.node_id === ident?.author_id);
+    if (ident && !existing) {
+      try {
+        await cmd.memberUpsert(spaceId, `Duo-${ident.author_id.slice(0, 4)}`);
+        await get().refreshMeta();
+      } catch {
+        // non-fatal
+      }
+    }
   },
 
   async getShareTicket(spaceId) {

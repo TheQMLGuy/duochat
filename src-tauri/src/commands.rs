@@ -417,3 +417,25 @@ pub async fn file_default_download_path(
     let path = dir.join("duochat").join(name);
     Ok(path.to_string_lossy().to_string())
 }
+
+#[derive(serde::Serialize)]
+pub struct FilePreview {
+    pub meta: FileMeta,
+    pub bytes: Vec<u8>,
+}
+
+#[tauri::command]
+pub async fn file_read_preview(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    space_id: String,
+    id: String,
+    max_bytes: Option<u64>,
+) -> CmdResult<FilePreview> {
+    let space = ensure_space(&app, &state, &space_id).await?;
+    let (meta, bytes) = space
+        .read_file_bytes(&id, max_bytes.unwrap_or(16 * 1024 * 1024))
+        .await
+        .map_err(err)?;
+    Ok(FilePreview { meta, bytes })
+}

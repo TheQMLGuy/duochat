@@ -554,6 +554,28 @@ impl Space {
         self.get_json::<FileMeta>(&entry).await
     }
 
+    pub async fn read_file_bytes(&self, id: &str, max_size: u64) -> Result<(FileMeta, Vec<u8>)> {
+        let Some(meta) = self.get_file(id).await? else {
+            return Err(anyhow!("file not found"));
+        };
+        if meta.size > max_size {
+            return Err(anyhow!(
+                "file too large for preview ({} bytes > {} limit)",
+                meta.size,
+                max_size
+            ));
+        }
+        let hash = iroh_blobs::Hash::from_str(&meta.hash)
+            .map_err(|e| anyhow!("parse hash: {e}"))?;
+        let bytes = self
+            .blobs
+            .blobs()
+            .get_bytes(hash)
+            .await
+            .map_err(|e| anyhow!("read blob: {e}"))?;
+        Ok((meta, bytes.to_vec()))
+    }
+
     pub async fn export_file(&self, id: &str, target: std::path::PathBuf) -> Result<FileMeta> {
         let Some(meta) = self.get_file(id).await? else {
             return Err(anyhow!("file not found"));

@@ -84,6 +84,7 @@ pub fn run() {
             file_upload,
             file_export,
             file_default_download_path,
+            file_read_preview,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

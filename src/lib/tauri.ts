@@ -118,4 +118,10 @@ export const cmd = {
     invoke<FileMeta>("file_export", { spaceId, id, targetPath }),
   fileDefaultDownloadPath: (name: string) =>
     invoke<string>("file_default_download_path", { name }),
+  fileReadPreview: (spaceId: string, id: string, maxBytes = 16 * 1024 * 1024) =>
+    invoke<{ meta: FileMeta; bytes: number[] }>("file_read_preview", {
+      spaceId,
+      id,
+      maxBytes,
+    }),
 };
