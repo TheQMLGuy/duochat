@@ -1,0 +1,43 @@
+[package]
+name = "duochat"
+version = "0.1.0"
+description = "Peer-to-peer collaboration for two-person teams"
+authors = ["duochat"]
+edition = "2021"
+
+[lib]
+name = "duochat_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+tauri-plugin-store = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-os = "2"
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"
+futures-lite = "2"
+futures-util = "0.3"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+nanoid = "0.4"
+hex = "0.4"
+bytes = "1"
+
+iroh = "0.98.1"
+iroh-blobs = "0.100.0"
+iroh-gossip = "0.98.0"
+iroh-docs = "0.98.0"
+
+[target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
+tauri-plugin-barcode-scanner = "2"
